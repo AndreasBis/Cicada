@@ -37,7 +37,7 @@ install -D -m 0644 "$HOME/Documents/Cicada/scripts/antix-vm-network.py" "$HOME/D
 | Download folder | A per-VM host directory selected with `VM_DOWNLOAD` is mounted at `/mnt/downloads` and used as the guest's Downloads directory |
 | Network | Two virtio adapters: default IPv4 NAT for system maintenance/DNS, and a dedicated IPv6 network with an explicit per-VM public source address |
 | Display | SPICE bound to `127.0.0.1` with virtio video |
-| VM identity | A unique UUID, MAC address, hostname, and automatically selected European timezone |
+| VM configuration | A unique UUID, MAC address, hostname, and automatically selected European timezone |
 
 The selected timezone changes the guest's local time only. It does not change the public IP address or configure a VPN.
 
@@ -53,7 +53,7 @@ Inside the guest, the helper selects the dedicated adapter by MAC and installs a
 
 If IPv6 is unavailable, or a redirect/download endpoint supports only IPv4, the browser connection fails instead of silently using the shared public IPv4 address. Finish guest setup before using Firefox, and launch the configured browser with `browser`, which refreshes the guest rules before starting it.
 
-Different exact IPv6 addresses do not guarantee different website allowances. All VMs still share the ISP prefix and connection; a service may group that prefix, accounts or download tokens. The earlier experiment already demonstrated distinct IPv6 addresses at Cloudflare without resolving the target's restriction. This revision tightens address ownership and removes browser IPv4 fallback; it does not establish which rule caused that restriction.
+Different exact IPv6 addresses do not determine how a website will treat or correlate connections. All VMs still share the ISP prefix and connection, and an online service can use many signals beyond the source address. The earlier verification demonstrated distinct IPv6 addresses at Cloudflare. This revision tightens address ownership and removes browser IPv4 fallback so that the selected IPv6 route is testable.
 
 This routed/source-translated design requires neither Ethernet nor a Wi-Fi bridge nor router changes. It still depends on the router and ISP accepting multiple IPv6 addresses on the host's existing connection. See [libvirt virtual networking](https://libvirt.org/formatnetwork.html) and [the Wi-Fi bridging limitation](https://wiki.libvirt.org/Networking.html).
 

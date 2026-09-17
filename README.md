@@ -1,10 +1,10 @@
 # Cicada
 
-Cicada creates reusable antiX 26 virtual machines on a Fedora host with KVM and libvirt. Each VM boots from the same read-only antiX ISO while keeping its own persistent root filesystem, Firefox profile, UUID, MAC addresses, hostname, timezone, and public IPv6 identity.
+Cicada creates reusable antiX 26 virtual machines on a Fedora host with KVM and libvirt. Each VM boots from the same read-only antiX ISO while keeping its own persistent root filesystem, Firefox profile, UUID, MAC addresses, hostname, timezone, and mapped public IPv6 source address.
 
-Cicada is not a general-purpose VM launcher. Its specific purpose is to reproduce one network property commonly seen when separate physical devices use native IPv6: each browser exits through a different exact public IPv6 address while retaining independent browser state. An ordinary libvirt VM can provide separate virtual hardware and private addresses, but its default IPv4 NAT normally sends every guest through the same public IPv4 address and does not guarantee routed public IPv6.
+Cicada is not a general-purpose VM launcher. Its specific purpose is to provide a reproducible environment for testing per-VM native IPv6 source routing alongside independent browser state. An ordinary libvirt VM can provide separate virtual hardware and private addresses, but its default IPv4 NAT normally sends every guest through the same public IPv4 address and does not guarantee routed public IPv6.
 
-To preserve that distinction, Cicada prevents the normal desktop user from falling back to the shared public IPv4 address; IPv4 remains available for DNS and system maintenance. Cicada does not create separate public IPv4 addresses. It also does not provide a VPN, anonymity, anti-fingerprinting, or a guarantee that a website will treat two VMs as unrelated clients.
+For an unambiguous routing test, Cicada prevents the normal desktop user from falling back to the shared public IPv4 address; IPv4 remains available for DNS and system maintenance. Cicada does not create separate public IPv4 addresses. It also does not provide a VPN, anonymity, anti-fingerprinting, or any guarantee about how an online service will correlate sessions.
 
 ## What Cicada Builds
 
@@ -36,7 +36,7 @@ The network helper records assignments by VM UUID in `/var/lib/antix-vm-network/
 
 The browser guard rejects public IPv4 traffic from the normal desktop user, while preserving IPv4 loopback, DNS through the default libvirt gateway, and maintenance access for root and APT. IPv4-only sites and redirects therefore fail instead of silently sharing the host's public IPv4 address.
 
-All VMs still share one physical uplink and ISP prefix. A service can group clients by the shared prefix, account, token, browser fingerprint, or another server-side signal. A distinct public `/128` is address separation, not proof of a distinct service identity.
+All VMs still share one physical uplink and ISP prefix. An online service may correlate sessions through the shared prefix, account, browser fingerprint, or another server-side signal. A distinct public `/128` confirms only the source address used for a connection.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ All VMs still share one physical uplink and ISP prefix. A service can group clie
 - The antiX 26 x64 Full ISO named exactly `antiX-26_x64-full.iso`.
 - The setup script and network helper kept together.
 
-Cicada cannot obtain an additional ISP prefix, add IPv6 to an IPv4-only connection, or bypass a router or ISP that rejects multiple IPv6 addresses on the host connection.
+Cicada cannot obtain an additional ISP prefix, add IPv6 to an IPv4-only connection, or override router or ISP limits on multiple IPv6 addresses on the host connection.
 
 Follow [GUIDE.md](GUIDE.md) to install and validate the Fedora virtualization stack before creating a VM.
 
@@ -133,7 +133,7 @@ Do not copy or hand-edit the registry. The helper validates its managed aliases,
 
 Use the local status report to inspect assignments, then compare each guest browser's `ip=` value at `https://www.cloudflare.com/cdn-cgi/trace` with its assigned address. That check confirms the address used for the Cloudflare request only; it cannot prove what another website, API, CDN, or download endpoint observes.
 
-The documented experiment produced different browser-visible IPv6 addresses for two VMs, but the target download service still rejected the second VM. Cicada closes the shared-IPv4 fallback path and assigns explicit IPv6 identities, but the target's grouping rule remains unknown.
+The documented verification produced different browser-visible IPv6 addresses for two VMs. This confirms the source address used for that check only; it does not establish how another website, API, CDN, or download endpoint will interpret or correlate those connections.
 
 The desktop IPv4 rule is a traffic guard, not a security boundary against a deliberately modified guest, root activity, or a separately configured proxy. Review the threat model and operational caveats in the guide before relying on it.
 
