@@ -451,6 +451,103 @@ def address_inventory() -> dict[PublicAlias, dict[str, Any]]:
     return inventory
 
 
+def remove_tracked_aliases(aliases: list[PublicAlias]) -> None:
+
+    inventory = address_inventory()
+    for alias in aliases:
+        address = inventory.get(alias)
+        if address is not None and (
+            address.get("prefixlen") != 128
+            or address.get("preferred_life_time") != 0
+        ):
+            raise RuntimeError(
+                f"Tracked alias {alias.address} has unexpected properties; "
+                "it was not changed or removed."
+            )
+    for alias in aliases:
+        if alias in inventory:
+            run_command(
+                "ip",
+                "-6",
+                "address",
+                "del",
+                f"{alias.address}/128",
+                "dev",
+                alias.interface,
+            )
+
+
+def remove_vm_metadata(vm_uuid: str, state: NetworkState) -> None:
+
+    canonical_uuid = str(uuid.UUID(vm_uuid))
+    identity = next(
+        (entry for entry in state.vms if entry.uuid == canonical_uuid),
+        None,
+    )
+    if identity is not None:
+        removed_aliases = [
+            alias
+            for alias in state.aliases
+            if int(ipaddress.IPv6Address(alias.address)) & (2**64 - 1)
+            == identity.public_identifier
+        ]
+        remove_tracked_aliases(removed_aliases)
+        state.vms = [entry for entry in state.vms if entry.uuid != canonical_uuid]
+        state.aliases = [
+            alias for alias in state.aliases if alias not in removed_aliases
+        ]
+        save_state(state)
+
+    backup_path = STATE_DIRECTORY / "backups" / f"{canonical_uuid}.xml"
+    if backup_path.is_symlink():
+        raise RuntimeError(f"Refusing a symlink as the domain backup: {backup_path}.")
+    backup_path.unlink(missing_ok=True)
+
+    definition_path = STATE_DIRECTORY / "domain.xml"
+    if definition_path.is_symlink():
+        raise RuntimeError(f"Refusing a symlink as the temporary domain XML: {definition_path}.")
+    if definition_path.is_file():
+        domain = element_tree.parse(definition_path).getroot()
+        if domain.findtext("uuid", "").lower() == canonical_uuid:
+            definition_path.unlink()
+
+
+def prune_missing_vms(state: NetworkState) -> bool:
+
+    if not state.vms:
+        return False
+    existing_uuids = {
+        line.strip().lower()
+        for line in virsh("list", "--all", "--uuid").splitlines()
+        if line.strip()
+    }
+    missing_uuids = [
+        identity.uuid
+        for identity in state.vms
+        if identity.uuid not in existing_uuids
+    ]
+    for vm_uuid in missing_uuids:
+        remove_vm_metadata(vm_uuid, state)
+    return bool(missing_uuids)
+
+
+def clear_empty_network_state(state: NetworkState) -> None:
+
+    remove_tracked_aliases(state.aliases)
+    if run_command(
+        "nft",
+        "list",
+        "table",
+        "ip6",
+        HOST_TABLE,
+        check=False,
+    ).returncode == 0:
+        run_command("nft", "delete", "table", "ip6", HOST_TABLE)
+    if state.aliases:
+        state.aliases = []
+        save_state(state)
+
+
 def address_flags(address: dict[str, Any]) -> set[str]:
 
     return set(address.get("flags", [])) | {
@@ -468,7 +565,8 @@ def address_ready(address: dict[str, Any]) -> bool:
 def refresh_network(state: NetworkState) -> None:
 
     if not state.vms:
-        raise RuntimeError("No VMs are registered for dedicated IPv6.")
+        clear_empty_network_state(state)
+        return
     interface, prefix = current_uplink(state)
     desired_addresses = {
         identity.uuid: public_address(identity, prefix)
@@ -831,8 +929,9 @@ def enable_vm(vm_name: str, state: NetworkState) -> None:
     definition_path = STATE_DIRECTORY / "domain.xml"
     atomic_write(definition_path, updated_xml)
     virsh("define", str(definition_path))
-    atomic_write(share / "antix-setup.sh", setup_source, 0o644)
+    atomic_write(share / "antix-vm-setup.sh", setup_source, 0o755)
     atomic_write(share / "antix-vm-network.py", Path(__file__).read_text(), 0o644)
+    (share / "antix-setup.sh").unlink(missing_ok=True)
     install_host_service()
     print(f"IPv6 configured for {vm_name}; its disk and profile were preserved.")
     print("Start the VM and complete the guest step in ANTIX-VM-GUIDE.md.")
@@ -1267,7 +1366,15 @@ def main() -> None:
             elif arguments.command == "install-guest":
                 install_guest()
             else:
+                helper_source = Path(__file__).read_text()
+                if HELPER_PATH.is_symlink():
+                    raise RuntimeError(f"Refusing a symlink as the installed helper: {HELPER_PATH}.")
+                if not HELPER_PATH.is_file() or HELPER_PATH.read_text() != helper_source:
+                    atomic_write(HELPER_PATH, helper_source, 0o644)
                 state = load_state()
+                pruned = prune_missing_vms(state)
+                if (pruned or not state.vms) and arguments.command != "refresh":
+                    refresh_network(state)
                 if arguments.command == "enable":
                     enable_vm(arguments.vm_name, state)
                 elif arguments.command == "refresh":

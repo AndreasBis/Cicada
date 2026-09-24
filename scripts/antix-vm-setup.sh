@@ -779,10 +779,14 @@ PY
     download_context=$(python3 -c 'import re, sys; print(re.escape(sys.argv[1]) + r"(/.*)?")' "$download")
     semanage fcontext -m -t svirt_image_t "$download_context" 2>/dev/null \
         || semanage fcontext -a -t svirt_image_t "$download_context"
-    local guest_copy
-    guest_copy=$(mktemp "$share/.antix-setup.XXXXXX")
-    install -m 0644 -o "$owner_uid" -g "$owner_gid" "$self" "$guest_copy"
-    mv -fT "$guest_copy" "$share/antix-setup.sh"
+    local setup_copy network_copy
+    setup_copy=$(mktemp "$share/.antix-vm-setup.XXXXXX")
+    install -m 0755 -o "$owner_uid" -g "$owner_gid" "$self" "$setup_copy"
+    mv -fT "$setup_copy" "$share/antix-vm-setup.sh"
+    network_copy=$(mktemp "$share/.antix-vm-network.XXXXXX")
+    install -m 0644 -o "$owner_uid" -g "$owner_gid" "$network_helper" "$network_copy"
+    mv -fT "$network_copy" "$share/antix-vm-network.py"
+    rm -f -- "$share/antix-setup.sh"
     restorecon -R "$share"
     restorecon -R "$download"
 
@@ -843,7 +847,7 @@ PY
     printf '\nInside the guest (not the installer), type:\n'
     printf 'sudo mkdir -p /mnt/shared\n'
     printf 'mountpoint -q /mnt/shared || sudo mount -t virtiofs shared /mnt/shared\n'
-    printf 'bash /mnt/shared/antix-setup.sh --guest\n'
+    printf 'bash /mnt/shared/antix-vm-setup.sh --guest\n'
 }
 
 case "${1:-}" in
@@ -851,7 +855,7 @@ case "${1:-}" in
         [[ $# -eq 2 ]] || die "Usage: bash antix-vm-setup.sh --enable-ipv6 VM_NAME"
         valid_name "$2" || die "Use a valid VM name."
         host_ipv6_command enable "$2"
-        printf "\nAfter starting the VM: bash /mnt/shared/antix-setup.sh --guest\n"
+        printf "\nAfter starting the VM: bash /mnt/shared/antix-vm-setup.sh --guest\n"
         ;;
     --ipv6-status)
         [[ $# -eq 1 ]] || die "Usage: bash antix-vm-setup.sh --ipv6-status"
@@ -873,13 +877,13 @@ case "${1:-}" in
         printf 'Usage: bash antix-vm-setup.sh VM_NAME VM_DOWNLOAD [--replace]\n'
         printf 'Example: VM_NAME="antix-vm1"\n'
         printf '         VM_DOWNLOAD="$HOME/Videos/Captures"\n'
-        printf '         bash ~/Downloads/antix-vm-setup.sh "$VM_NAME" "$VM_DOWNLOAD"\n'
+        printf '         bash ~/Documents/Shared/antix-vm-setup.sh "$VM_NAME" "$VM_DOWNLOAD"\n'
         printf 'Run as your normal Fedora user. --replace purges the selected VM/private disk.\n'
         printf "Network: dedicated public IPv6 per VM; desktop Internet traffic cannot fall back to IPv4.\n"
         printf "Root/APT and local DNS retain IPv4. IPv4-only sites will not load in browser.\n"
         printf "Existing VM upgrade: bash antix-vm-setup.sh --enable-ipv6 VM_NAME\n"
         printf "Address report: bash antix-vm-setup.sh --ipv6-status\n"
-        printf 'Guest bootstrap: bash /mnt/shared/antix-setup.sh --guest\n'
+        printf 'Guest bootstrap: bash /mnt/shared/antix-vm-setup.sh --guest\n'
         ;;
     *)
         [[ $(id -u) -ne 0 ]] || die 'Run from your normal Fedora account; the script invokes sudo.'

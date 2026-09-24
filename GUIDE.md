@@ -6,21 +6,21 @@ Each guest runs the antiX live system with its own persistent root filesystem. D
 
 ## Requirements
 
-Place these three files directly in `~/Downloads` before creating a VM:
+Place the antiX Full ISO in `~/Downloads` and keep the setup script and helper in `~/Documents/Shared`:
 
 - The antiX Full ISO named `antiX-26_x64-full.iso`.
-- The setup script named `antix-vm-setup.sh`.
-- Its companion helper named `antix-vm-network.py`.
+- The setup script named `antix-vm-setup.sh` in `~/Documents/Shared`.
+- Its companion helper named `antix-vm-network.py` in `~/Documents/Shared`.
 
 The host must be a Fedora x86_64 system with hardware virtualization enabled and working native IPv6 on its default uplink, using a global `/64` prefix. This setup does not obtain another ISP prefix or make an IPv4-only connection support IPv6.
 
 ### Apply the Maintained Setup Files
 
-Copy the maintained script and helper together. The host setup and existing-VM upgrade also distribute both files to the VM's configured shared folder.
+Copy the maintained script and helper together into the shared folder. Host setup and existing-VM upgrades keep these copies current.
 
 ```bash
-install -D -m 0755 "$HOME/Documents/Cicada/scripts/antix-vm-setup.sh" "$HOME/Downloads/antix-vm-setup.sh"
-install -D -m 0644 "$HOME/Documents/Cicada/scripts/antix-vm-network.py" "$HOME/Downloads/antix-vm-network.py"
+install -D -m 0755 "$HOME/Documents/Cicada/scripts/antix-vm-setup.sh" "$HOME/Documents/Shared/antix-vm-setup.sh"
+install -D -m 0644 "$HOME/Documents/Cicada/scripts/antix-vm-network.py" "$HOME/Documents/Shared/antix-vm-network.py"
 ```
 
 ## VM Specifications
@@ -45,7 +45,7 @@ The selected timezone changes the guest's local time only. It does not change th
 
 Each VM keeps its own disk, Firefox profile, UUID and virtual MAC addresses. Its dedicated adapter receives one fixed private IPv6 address from `fd71:6e9f:db42:1::/64`. Fedora maps that address to one reserved public IPv6 `/128` on the current Wi-Fi uplink.
 
-The registry at `/var/lib/antix-vm-network/state.json` keys assignments by VM UUID. An assignment is reused after restarts and name changes. If the ISP changes the public prefix, the helper preserves each VM's unique interface identifier but necessarily changes its full public address. Do not copy or hand-edit this registry.
+The registry at `/var/lib/antix-vm-network/state.json` keys assignments by VM UUID. An assignment is reused after restarts and name changes. If the ISP changes the public prefix, the helper preserves each VM's unique interface identifier but necessarily changes its full public address. When a VM is undefined, helper refreshes remove its registry entry, aliases, and original domain XML backup. Status and periodic refreshes reconcile against libvirt, including VMs removed through another tool. Do not copy or hand-edit this registry.
 
 The host checks for existing-address collisions and waits for IPv6 duplicate-address detection before enabling a new mapping. Its firewall checks the VM's private address and dedicated MAC, applies that VM's explicit source translation, and blocks unmapped egress. Reserved public aliases are marked nonpreferred and blocked as sources for host-originated application traffic; required IPv6 neighbor-discovery messages remain allowed.
 
@@ -144,7 +144,7 @@ Install the dependencies the setup script uses to configure the virtiofs share, 
 sudo dnf install -y virtiofsd acl policycoreutils-python-utils nftables iproute procps-ng python3
 ```
 
-The setup script creates `~/Documents/Shared`, configures its permissions and SELinux context, distributes the setup/helper files, and copies the ISO into libvirt storage when needed. No separate manual share setup is needed.
+The setup script creates `~/Documents/Shared`, configures its permissions and SELinux context, keeps both maintained scripts there, and copies the ISO into libvirt storage when needed. No separate manual share setup is needed.
 
 ### Remove Remote Viewer
 
@@ -172,13 +172,13 @@ VM_DOWNLOAD="$HOME/Videos/Captures"
 Run the host script from a normal Fedora account. To create a new VM without overwriting an existing VM or private disk, use the selected `VM_NAME` and `VM_DOWNLOAD`:
 
 ```bash
-bash "$HOME/Downloads/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"
+bash "$HOME/Documents/Shared/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"
 ```
 
 To deliberately rebuild that same VM, add `--replace`. This deletes only the existing VM with the selected name and its recognized private disk before rebuilding it.
 
 ```bash
-bash "$HOME/Downloads/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD" --replace
+bash "$HOME/Documents/Shared/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD" --replace
 ```
 
 The script opens Virtual Machine Manager after creating the VM.
@@ -202,7 +202,7 @@ mountpoint -q /mnt/shared || sudo mount -t virtiofs shared /mnt/shared
 Run the guest setup copied into the shared folder:
 
 ```bash
-bash /mnt/shared/antix-setup.sh --guest
+bash /mnt/shared/antix-vm-setup.sh --guest
 ```
 
 These are the only three commands required inside the guest before logout. The `--guest` command repairs the IPv4 maintenance route before APT, installs the required packages, and configures IPv6 automatically.
@@ -274,7 +274,7 @@ Set the exact VM name to remove.
 VM_NAME="antix-vm1"
 ```
 
-The following command destroys the selected VM if it is running, undefines it, and deletes only its recognized private disk files. It does not create a replacement. Its reserved IPv6 identity remains in the registry; this command does not remove shared host networking or other VMs' assignments.
+The following command destroys the selected VM if it is running, undefines it, and deletes only its recognized private disk files. It does not create a replacement. After undefining a VM, the network helper removes its IPv6 registry entry, public aliases, and original domain XML backup. Status and periodic refreshes also reconcile the registry with libvirt, so VMs removed through another tool are purged. Shared host networking and other VMs' assignments remain.
 
 ```bash
 sudo bash -c '
@@ -289,4 +289,10 @@ virsh destroy "$vm" 2>/dev/null || true
 virsh undefine "$vm" "${flags[@]}"
 rm -f -- "/var/lib/libvirt/images/${vm}-persistence.raw" "/var/lib/libvirt/images/${vm}.qcow2"
 ' _ "${VM_NAME:?Set VM_NAME first}"
+```
+
+Refresh the network helper now so the removed VM's network metadata is purged immediately:
+
+```bash
+sudo python3 "$HOME/Documents/Shared/antix-vm-network.py" refresh
 ```

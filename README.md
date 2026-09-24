@@ -32,7 +32,7 @@ antiX VM
     fd71:6e9f:db42:1::/64              per-VM nftables translation
 ```
 
-The network helper records assignments by VM UUID in `/var/lib/antix-vm-network/state.json`. A VM keeps its interface identifier across restarts, renames, and ISP prefix changes. If the ISP changes the routed prefix, the complete public address changes while that identifier remains stable.
+The network helper records assignments by VM UUID in `/var/lib/antix-vm-network/state.json`. A VM keeps its interface identifier across restarts, renames, and ISP prefix changes. If the ISP changes the routed prefix, the complete public address changes while that identifier remains stable. When a VM is undefined, helper refreshes remove its registry entry, public aliases, and saved domain XML; status and periodic refreshes reconcile against libvirt.
 
 The browser guard rejects public IPv4 traffic from the normal desktop user, while preserving IPv4 loopback, DNS through the default libvirt gateway, and maintenance access for root and APT. IPv4-only sites and redirects therefore fail instead of silently sharing the host's public IPv4 address.
 
@@ -53,11 +53,11 @@ Follow [GUIDE.md](GUIDE.md) to install and validate the Fedora virtualization st
 
 ## Quick Start
 
-From the repository root, copy both maintained files into `~/Downloads`:
+From the repository root, copy both maintained files into `~/Documents/Shared`:
 
 ```bash
-install -D -m 0755 scripts/antix-vm-setup.sh "$HOME/Downloads/antix-vm-setup.sh"
-install -D -m 0644 scripts/antix-vm-network.py "$HOME/Downloads/antix-vm-network.py"
+install -D -m 0755 scripts/antix-vm-setup.sh "$HOME/Documents/Shared/antix-vm-setup.sh"
+install -D -m 0644 scripts/antix-vm-network.py "$HOME/Documents/Shared/antix-vm-network.py"
 ```
 
 Place the ISO at:
@@ -71,7 +71,7 @@ Choose a lowercase VM name and an absolute download directory inside your home d
 ```bash
 VM_NAME="antix-vm1"
 VM_DOWNLOAD="$HOME/Videos/Captures"
-bash "$HOME/Downloads/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"
+bash "$HOME/Documents/Shared/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"
 ```
 
 The VM name must contain 1 to 63 lowercase letters, digits, or hyphens and must begin and end with a letter or digit.
@@ -82,7 +82,7 @@ When the antiX live desktop opens, run these three commands in the guest:
 ```bash
 sudo mkdir -p /mnt/shared
 mountpoint -q /mnt/shared || sudo mount -t virtiofs shared /mnt/shared
-bash /mnt/shared/antix-setup.sh --guest
+bash /mnt/shared/antix-vm-setup.sh --guest
 ```
 
 Guest setup writes its output to `~/Documents/Shared/<guest-hostname>-setup.log` on Fedora. After setup succeeds, log out once:
@@ -103,10 +103,10 @@ Run host-side commands from the normal Fedora account unless the command explici
 
 | Context | Operation | Command |
 | --- | --- | --- |
-| Fedora | Create a VM | `bash "$HOME/Downloads/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"` |
-| Fedora | Deliberately rebuild a VM | `bash "$HOME/Downloads/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD" --replace` |
-| Fedora | Add the current IPv6 design to a stopped managed VM | `bash "$HOME/Downloads/antix-vm-setup.sh" --enable-ipv6 "$VM_NAME"` |
-| Fedora | Show recorded IPv6 assignments | `bash "$HOME/Downloads/antix-vm-setup.sh" --ipv6-status` |
+| Fedora | Create a VM | `bash "$HOME/Documents/Shared/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"` |
+| Fedora | Deliberately rebuild a VM | `bash "$HOME/Documents/Shared/antix-vm-setup.sh" "$VM_NAME" "$VM_DOWNLOAD" --replace` |
+| Fedora | Add the current IPv6 design to a stopped managed VM | `bash "$HOME/Documents/Shared/antix-vm-setup.sh" --enable-ipv6 "$VM_NAME"` |
+| Fedora | Show recorded IPv6 assignments | `bash "$HOME/Documents/Shared/antix-vm-setup.sh" --ipv6-status` |
 | Fedora | Start an existing VM | `sudo virsh -c qemu:///system start "$VM_NAME"` |
 | antiX guest | Show guest identity and network details | `vm-info` |
 | antiX guest | Start the configured browser | `browser` |
@@ -125,7 +125,7 @@ The setup installs and maintains:
 - `/etc/sysctl.d/90-antix-vm-network.conf`.
 - The `antix-vm-ipv6` libvirt network on `virbr-antix6`.
 - The dedicated `ip6 antix_vm_ipv6` nftables table.
-- Registry data and original domain XML backups under `/var/lib/antix-vm-network`.
+- Registry data and original domain XML backups under `/var/lib/antix-vm-network`; a VM's backup is removed when the VM is undefined.
 
 Do not copy or hand-edit the registry. The helper validates its managed aliases, detects local address collisions, waits for IPv6 duplicate-address detection, and refuses incompatible remnants from the earlier networking experiment.
 
