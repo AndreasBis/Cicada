@@ -106,8 +106,8 @@ zone = args.get("tz", "")
 
 if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", name):
     raise SystemExit("STOP: valid VM hostname missing from the boot configuration.")
-if not re.fullmatch(r"Europe/[A-Za-z_]+", zone):
-    raise SystemExit("STOP: European timezone missing from the boot configuration.")
+if not re.fullmatch(r"[A-Za-z]+(?:/[A-Za-z0-9_+-]+)+", zone):
+    raise SystemExit("STOP: location timezone missing from the boot configuration.")
 zonefile = Path("/usr/share/zoneinfo") / zone
 if not zonefile.is_file():
     raise SystemExit(f"STOP: the guest does not have timezone {zone}.")
@@ -596,48 +596,22 @@ import subprocess
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 def virsh(*arguments: str) -> str:
 
     return subprocess.check_output(["virsh", *arguments], text=True)
 
 now = datetime.datetime.now(datetime.timezone.utc)
-pool = [
-    "Europe/London",
-    "Europe/Lisbon",
-    "Europe/Dublin",
-    "Europe/Berlin",
-    "Europe/Paris",
-    "Europe/Madrid",
-    "Europe/Rome",
-    "Europe/Amsterdam",
-    "Europe/Brussels",
-    "Europe/Vienna",
-    "Europe/Prague",
-    "Europe/Warsaw",
-    "Europe/Zurich",
-    "Europe/Stockholm",
-    "Europe/Oslo",
-    "Europe/Copenhagen",
-    "Europe/Budapest",
-    "Europe/Belgrade",
-    "Europe/Athens",
-    "Europe/Helsinki",
-    "Europe/Bucharest",
-    "Europe/Sofia",
-    "Europe/Riga",
-    "Europe/Tallinn",
-    "Europe/Vilnius",
-    "Europe/Kaliningrad",
-    "Europe/Moscow",
-    "Europe/Minsk",
-    "Europe/Samara",
-    "Europe/Saratov",
-    "Europe/Astrakhan",
-    "Europe/Ulyanovsk",
-]
-pool = [zone for zone in pool if (Path("/usr/share/zoneinfo") / zone).is_file()]
+geographic_regions = {
+    "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic",
+    "Australia", "Europe", "Indian", "Pacific",
+}
+pool = sorted(
+    zone for zone in available_timezones()
+    if zone.split("/", 1)[0] in geographic_regions
+    and (Path("/usr/share/zoneinfo") / zone).is_file()
+)
 used_zones = set()
 used_offsets = set()
 used_macs = set()
@@ -664,7 +638,7 @@ for name in virsh("list", "--all", "--name").splitlines():
 available = [zone for zone in pool if zone not in used_zones]
 if not available:
     raise SystemExit(
-        "STOP: every city in the European timezone pool is already assigned; "
+        "STOP: every available location timezone is already assigned; "
         "no VM was removed."
     )
 different_offset = [
@@ -818,7 +792,7 @@ PY
         --connect qemu:///system \
         --name "$vm" --uuid "$vm_uuid" \
         --virt-type kvm --arch x86_64 --machine q35 \
-        --cpu host-passthrough --vcpus 2 --memory 2048 \
+        --cpu host-passthrough --vcpus 1 --memory 2048 \
         --memorybacking source.type=memfd,access.mode=shared \
         --disk "path=$disk,format=raw,bus=virtio" \
         --disk "path=$iso,device=cdrom,readonly=on" \

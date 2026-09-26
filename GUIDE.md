@@ -28,7 +28,7 @@ install -D -m 0644 "$HOME/Documents/Cicada/scripts/antix-vm-network.py" "$HOME/D
 | Component | Configuration |
 | --- | --- |
 | Guest OS | antiX 26 x64 Full, booted as a live system from the shared read-only ISO |
-| Processor | 2 vCPUs with host CPU passthrough |
+| Processor | 1 vCPU with host CPU passthrough |
 | Memory | 2,048 MiB |
 | Persistent storage | One private 1,000,000,000-byte raw disk per VM, including an 850 MiB persistent root filesystem |
 | Swap | 1 GiB zram inside the VM's allocated memory |
@@ -37,9 +37,9 @@ install -D -m 0644 "$HOME/Documents/Cicada/scripts/antix-vm-network.py" "$HOME/D
 | Download folder | A per-VM host directory selected with `VM_DOWNLOAD` is mounted at `/mnt/downloads` and used as the guest's Downloads directory |
 | Network | Two virtio adapters: default IPv4 NAT for system maintenance/DNS, and a dedicated IPv6 network with an explicit per-VM public source address |
 | Display | SPICE bound to `127.0.0.1` with virtio video |
-| VM configuration | A unique UUID, MAC address, hostname, and automatically selected European timezone |
+| VM configuration | A unique UUID, MAC address, hostname, and automatically selected geographic timezone |
 
-The selected timezone changes the guest's local time only. It does not change the public IP address or configure a VPN.
+The selected timezone is chosen from available geographic IANA timezones worldwide. Each managed VM receives a different timezone name until the available pool is exhausted. The timezone changes the guest's local time only; it does not change the public IP address or configure a VPN.
 
 ## Network Separation
 

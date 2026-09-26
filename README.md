@@ -10,7 +10,7 @@ For an unambiguous routing test, Cicada prevents the normal desktop user from fa
 
 Each managed VM receives:
 
-- 2 virtual CPUs with host CPU passthrough.
+- 1 virtual CPU with host CPU passthrough.
 - 2,048 MiB of memory and 1 GiB of in-memory zram swap.
 - A private 1,000,000,000-byte raw persistence disk with an 850 MiB persistent root filesystem.
 - A shared, read-only antiX 26 Full ISO and shared extracted boot files.
