@@ -510,6 +510,8 @@ host_setup() {
     [[ "$download" == /?* && "$download" == "$(realpath -m -- "$download")" ]] ||
         die 'VM_DOWNLOAD must be a canonical absolute path.'
     [[ ! -L "$download" ]] || die 'VM_DOWNLOAD must not be a symbolic link.'
+    [[ "$download" != *[,\'\"\\[:cntrl:]]* ]] ||
+        die 'VM_DOWNLOAD must not contain commas, quotes, backslashes or control characters.'
     local protected
     for protected in /boot /dev /etc /proc /run /sys /tmp /usr /var; do
         [[ "$download" != "$protected" && "$download" != "$protected/"* ]] ||
@@ -614,7 +616,7 @@ import subprocess
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from zoneinfo import ZoneInfo, available_timezones
+from zoneinfo import ZoneInfo
 
 def virsh(*arguments: str) -> str:
 
@@ -625,8 +627,15 @@ geographic_regions = {
     "Africa", "America", "Antarctica", "Arctic", "Asia", "Atlantic",
     "Australia", "Europe", "Indian", "Pacific",
 }
+# Only canonical zones: Debian-based guests ship backward-compatible
+# aliases such as America/Louisville in tzdata-legacy, which antiX omits.
+canonical_zones = {
+    line.split()[1]
+    for line in Path("/usr/share/zoneinfo/tzdata.zi").read_text().splitlines()
+    if line.startswith("Z ")
+}
 pool = sorted(
-    zone for zone in available_timezones()
+    zone for zone in canonical_zones
     if zone.split("/", 1)[0] in geographic_regions
     and (Path("/usr/share/zoneinfo") / zone).is_file()
 )
@@ -770,7 +779,14 @@ PY
     semanage fcontext -m -t svirt_image_t "$share(/.*)?" 2>/dev/null \
         || semanage fcontext -a -t svirt_image_t "$share(/.*)?"
     local download_context
-    download_context=$(python3 -c 'import re, sys; print(re.escape(sys.argv[1]) + r"(/.*)?")' "$download")
+    # semanage rejects literal spaces, so whitespace is written as \xHH byte escapes.
+    download_context=$(python3 -c '
+import re, sys
+print("".join(
+    "".join(f"\\x{byte:02x}" for byte in char.encode("utf-8", "surrogateescape"))
+    if char.isspace() else re.escape(char)
+    for char in sys.argv[1]
+) + r"(/.*)?")' "$download")
     semanage fcontext -m -t svirt_image_t "$download_context" 2>/dev/null \
         || semanage fcontext -a -t svirt_image_t "$download_context"
     local setup_copy network_copy
@@ -870,7 +886,7 @@ case "${1:-}" in
     -h|--help|'')
         printf 'Usage: bash cicada-setup.sh VM_NAME VM_DOWNLOAD [--replace]\n'
         printf 'Example: VM_NAME="cicada-vm1"\n'
-        printf '         VM_DOWNLOAD="$HOME/Videos/Captures"\n'
+        printf '         VM_DOWNLOAD="$HOME/Downloads/$VM_NAME"\n'
         printf '         bash ~/Documents/Shared/cicada-setup.sh "$VM_NAME" "$VM_DOWNLOAD"\n'
         printf 'Run as your normal Fedora user. --replace purges the selected VM/private disk.\n'
         printf "Network: dedicated public IPv6 per VM; desktop Internet traffic cannot fall back to IPv4.\n"

@@ -16,12 +16,14 @@ The host must be a Fedora x86_64 system with hardware virtualization enabled and
 
 ### Apply the Maintained Setup Files
 
-Copy the maintained script and helper together into the shared folder. Host setup and existing-VM upgrades keep these copies current.
+From the root of your clone of this repository, copy the maintained script and helper together into the shared folder. Host setup and existing-VM upgrades keep these copies current.
 
 ```bash
-install -D -m 0755 "$HOME/Documents/Cicada/scripts/cicada-setup.sh" "$HOME/Documents/Shared/cicada-setup.sh"
-install -D -m 0644 "$HOME/Documents/Cicada/scripts/cicada-network.py" "$HOME/Documents/Shared/cicada-network.py"
+install -D -m 0755 scripts/cicada-setup.sh "$HOME/Documents/Shared/cicada-setup.sh"
+install -D -m 0644 scripts/cicada-network.py "$HOME/Documents/Shared/cicada-network.py"
 ```
+
+Repeat this step after pulling repository updates.
 
 ## VM Specifications
 
@@ -39,7 +41,7 @@ install -D -m 0644 "$HOME/Documents/Cicada/scripts/cicada-network.py" "$HOME/Doc
 | Display | SPICE bound to `127.0.0.1` with virtio video |
 | VM configuration | A unique UUID, MAC address, hostname, and automatically selected geographic timezone |
 
-The selected timezone is chosen from available geographic IANA timezones worldwide. Each managed VM receives a different timezone name until the available pool is exhausted. The timezone changes the guest's local time only; it does not change the public IP address or configure a VPN.
+The selected timezone is chosen from the canonical geographic IANA timezones worldwide, as listed in the host's `/usr/share/zoneinfo/tzdata.zi`. Backward-compatible aliases such as `America/Louisville` are excluded because the antiX guest does not ship them. Each managed VM receives a different timezone name until the available pool is exhausted. The timezone changes the guest's local time only; it does not change the public IP address or configure a VPN.
 
 ## Network Separation
 
@@ -53,7 +55,7 @@ Inside the guest, the helper selects the dedicated adapter by MAC and installs a
 
 If IPv6 is unavailable, or a redirect/download endpoint supports only IPv4, the browser connection fails instead of silently using the shared public IPv4 address. Finish guest setup before using Firefox, and launch the configured browser with `browser`, which refreshes the guest rules before starting it.
 
-Different exact IPv6 addresses do not determine how a website will treat or correlate connections. All VMs still share the ISP prefix and connection, and an online service can use many signals beyond the source address. The earlier verification demonstrated distinct IPv6 addresses at Cloudflare. This revision tightens address ownership and removes browser IPv4 fallback so that the selected IPv6 route is testable.
+Different exact IPv6 addresses do not determine how a website will treat or correlate connections. All VMs still share the ISP prefix and connection, and an online service can use many signals beyond the source address. Cicada enforces address ownership and removes browser IPv4 fallback so that the selected IPv6 route is testable; the verification steps are in the README.
 
 This routed/source-translated design works over Ethernet or Wi-Fi. It routes through whichever interface carries the host's default IPv6 route instead of bridging it, so it needs no bridge or router changes. It still depends on the router and ISP accepting multiple IPv6 addresses on the host's existing connection. See [libvirt virtual networking](https://libvirt.org/formatnetwork.html) and [the Wi-Fi bridging limitation](https://wiki.libvirt.org/Networking.html).
 
@@ -71,9 +73,11 @@ Only recorded aliases and the helper's own firewall table are updated. Unexpecte
 
 The forwarding/advertisement setting follows the [Linux kernel's `accept_ra=2` behavior](https://docs.kernel.org/networking/ip-sysctl.html).
 
-### Compatibility with the Previous IPv6 Experiment
+### Legacy Network Cleanup
 
-The helper refuses to run alongside the old `antix-vm-ipv6.service`, its NetworkManager dispatcher/helper, or the old `ip6 antix_vm_snat` table. If it reports one, inspect and remove only that old installation and its tracked aliases before proceeding. It does not delete unknown networking automatically.
+Hosts that never ran a pre-Cicada `antix-vm-ipv6` setup can skip this section.
+
+The helper refuses to run alongside the legacy `antix-vm-ipv6.service`, its NetworkManager dispatcher/helper, or the legacy `ip6 antix_vm_snat` table. If it reports one, inspect and remove only that legacy installation and its tracked aliases before proceeding. It does not delete unknown networking automatically.
 
 A remaining `cicada-ipv6` network can be reused only if its bridge, IPv6 gateway and routed configuration match. Copying new setup files alone never changes a running VM's adapters or boot options. Use the non-destructive upgrade below for existing VMs.
 
@@ -183,10 +187,10 @@ Use 1 to 63 lowercase letters, digits, or hyphens. The name must begin and end w
 
 ```bash
 VM_NAME="cicada-vm1"
-VM_DOWNLOAD="$HOME/Videos/Captures"
+VM_DOWNLOAD="$HOME/Downloads/$VM_NAME"
 ```
 
-`VM_DOWNLOAD` must be an absolute path. The path may be inside your home directory or elsewhere, such as on a second drive, but it must not be a symbolic link or lie under `/boot`, `/dev`, `/etc`, `/proc`, `/run`, `/sys`, `/tmp`, `/usr` or `/var`. The directory, or the existing folder it will be created in, must be owned by your normal Fedora account, and no other filesystem, such as another drive or a btrfs subvolume, may be mounted inside it. Setup labels the whole directory tree for VM access and gives the guest write access to all of it, so prefer a dedicated folder for each VM rather than an existing folder that holds other files. The setup creates the final directory if it does not exist. Each VM may use a different directory; the guest sees its selected directory at `/mnt/downloads`. Firefox asks where to save each download, starting in `/mnt/downloads`, so you can rename the file before saving it. Only files saved under `/mnt/downloads` reach the host directory.
+`VM_DOWNLOAD` must be an absolute path. The path may be inside your home directory or elsewhere, such as on a second drive, and may contain spaces, but it must not be a symbolic link, contain commas, quotes, backslashes or control characters, or lie under `/boot`, `/dev`, `/etc`, `/proc`, `/run`, `/sys`, `/tmp`, `/usr` or `/var`. The directory, or the existing folder it will be created in, must be owned by your normal Fedora account, and no other filesystem, such as another drive or a btrfs subvolume, may be mounted inside it. Setup labels the whole directory tree for VM access and gives the guest write access to all of it, so prefer a dedicated folder for each VM rather than an existing folder that holds other files. The setup creates the final directory if it does not exist. Each VM may use a different directory; the guest sees its selected directory at `/mnt/downloads`. Firefox asks where to save each download, starting in `/mnt/downloads`, so you can rename the file before saving it. Only files saved under `/mnt/downloads` reach the host directory.
 
 ### Create or Replace the VM
 

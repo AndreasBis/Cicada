@@ -72,12 +72,12 @@ Choose a lowercase VM name and an absolute download directory, then create the V
 
 ```bash
 VM_NAME="cicada-vm1"
-VM_DOWNLOAD="$HOME/Videos/Captures"
+VM_DOWNLOAD="$HOME/Downloads/$VM_NAME"
 bash "$HOME/Documents/Shared/cicada-setup.sh" "$VM_NAME" "$VM_DOWNLOAD"
 ```
 
 The VM name must contain 1 to 63 lowercase letters, digits, or hyphens and must begin and end with a letter or digit.
-The setup creates `VM_DOWNLOAD` if necessary and maps it to `/mnt/downloads` in that VM. The path may be inside your home directory or elsewhere, such as on a second drive, but it must not be a symbolic link or lie under `/boot`, `/dev`, `/etc`, `/proc`, `/run`, `/sys`, `/tmp`, `/usr` or `/var`. The directory, or the existing folder it will be created in, must be owned by your normal Fedora account, and no other filesystem, such as another drive or a btrfs subvolume, may be mounted inside it. Setup labels the whole directory tree for VM access and gives the guest write access to all of it, so prefer a dedicated folder for each VM rather than an existing folder that holds other files. Firefox asks where to save each download, starting in `/mnt/downloads`, so you can rename the file before saving it. Only files saved under `/mnt/downloads` reach the host directory.
+The setup creates `VM_DOWNLOAD` if necessary and maps it to `/mnt/downloads` in that VM. The path may be inside your home directory or elsewhere, such as on a second drive, and may contain spaces, but it must not be a symbolic link, contain commas, quotes, backslashes or control characters, or lie under `/boot`, `/dev`, `/etc`, `/proc`, `/run`, `/sys`, `/tmp`, `/usr` or `/var`. The directory, or the existing folder it will be created in, must be owned by your normal Fedora account, and no other filesystem, such as another drive or a btrfs subvolume, may be mounted inside it. Setup labels the whole directory tree for VM access and gives the guest write access to all of it, so prefer a dedicated folder for each VM rather than an existing folder that holds other files. Firefox asks where to save each download, starting in `/mnt/downloads`, so you can rename the file before saving it. Only files saved under `/mnt/downloads` reach the host directory.
 
 When the antiX live desktop opens, run these three commands in the guest:
 
@@ -129,13 +129,11 @@ The setup installs and maintains:
 - The dedicated `ip6 cicada_ipv6` nftables table.
 - Registry data and original domain XML backups under `/var/lib/cicada-network`; a VM's backup is removed when the VM is undefined.
 
-Do not copy or hand-edit the registry. The helper validates its managed aliases, detects local address collisions, waits for IPv6 duplicate-address detection, and refuses incompatible remnants from the earlier networking experiment.
+Do not copy or hand-edit the registry. The helper validates its managed aliases, detects local address collisions, waits for IPv6 duplicate-address detection, and refuses incompatible remnants of the legacy `antix-vm-ipv6` setup described in the guide.
 
 ## Verification and Limits
 
-Use the local status report to inspect assignments, then compare each guest browser's `ip=` value at `https://www.cloudflare.com/cdn-cgi/trace` with its assigned address. That check confirms the address used for the Cloudflare request only; it cannot prove what another website, API, CDN, or download endpoint observes.
-
-The documented verification produced different browser-visible IPv6 addresses for two VMs. This confirms the source address used for that check only; it does not establish how another website, API, CDN, or download endpoint will interpret or correlate those connections.
+Use the local status report to inspect assignments, then compare each guest browser's `ip=` value at `https://www.cloudflare.com/cdn-cgi/trace` with its assigned address. With two or more VMs running, each should report its own IPv6 address. That check confirms the source address used for the Cloudflare request only; it cannot prove what another website, API, CDN, or download endpoint observes, or how it will interpret or correlate those connections.
 
 The desktop IPv4 rule is a traffic guard, not a security boundary against a deliberately modified guest, root activity, or a separately configured proxy. Review the threat model and operational caveats in the guide before relying on it.
 
