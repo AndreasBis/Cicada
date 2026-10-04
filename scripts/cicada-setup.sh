@@ -15,25 +15,25 @@ valid_name() {
 
 guest_setup_log() {
 
-    [[ "${ANTIX_GUEST_LOG_STARTED:-no}" == "yes" ]] && return
+    [[ "${CICADA_GUEST_LOG_STARTED:-no}" == "yes" ]] && return
     [[ -w /mnt/shared ]] || die "The mounted shared folder is not writable."
     local guest_name
     guest_name=$(hostname)
-    valid_name "$guest_name" || guest_name="antix-guest"
+    valid_name "$guest_name" || guest_name="cicada-guest"
     local log_path="/mnt/shared/${guest_name}-setup.log"
     [[ ! -L "$log_path" ]] || die "Refusing a symlink as the setup log."
     [[ ! -e "$log_path" || ( -f "$log_path" && -w "$log_path" ) ]] ||
         die "The setup log is not a writable regular file."
     exec > >(tee -a -- "$log_path") 2>&1
-    ANTIX_GUEST_LOG_STARTED="yes"
+    CICADA_GUEST_LOG_STARTED="yes"
     printf "\nSetup output is saved to %s\n" "$log_path"
 }
 
 guest_ipv4_setup() {
 
     local network_helper
-    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/antix-vm-network.py"
-    [[ -f "$network_helper" ]] || die "The companion antix-vm-network.py file is missing."
+    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/cicada-network.py"
+    [[ -f "$network_helper" ]] || die "The companion cicada-network.py file is missing."
     sudo python3 "$network_helper" guest-ipv4
 }
 
@@ -42,12 +42,12 @@ guest_ipv6_setup() {
     [[ $(id -u) -eq 1000 ]] || die "Run the guest IPv6 command as the normal demo user."
     ! pgrep -u "$(id -u)" -x "firefox|firefox-esr" >/dev/null ||
         die "Close Firefox before changing the guest network."
-    [[ " $(cat /proc/cmdline) " == *" antix_ipv6_version=1 "* ]] ||
+    [[ " $(cat /proc/cmdline) " == *" cicada_ipv6_version=1 "* ]] ||
         die "Enable IPv6 for this VM on Fedora, then shut down and start the VM."
 
     local network_helper
-    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/antix-vm-network.py"
-    [[ -f "$network_helper" ]] || die "The companion antix-vm-network.py file is missing."
+    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/cicada-network.py"
+    [[ -f "$network_helper" ]] || die "The companion cicada-network.py file is missing."
 
     guest_setup_log
     guest_ipv4_setup
@@ -70,8 +70,8 @@ host_ipv6_command() {
 
     [[ $(id -u) -ne 0 ]] || die "Run the host command as your normal Fedora user."
     local network_helper
-    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/antix-vm-network.py"
-    [[ -f "$network_helper" ]] || die "The companion antix-vm-network.py file is missing."
+    network_helper="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/cicada-network.py"
+    [[ -f "$network_helper" ]] || die "The companion cicada-network.py file is missing."
     sudo python3 "$network_helper" "$@"
 }
 
@@ -82,7 +82,7 @@ guest_setup() {
     [[ $(id -u) -eq 1000 ]] || die 'This setup expects the standard antiX demo user (UID 1000).'
     ! pgrep -u "$(id -u)" -x 'firefox|firefox-esr' >/dev/null \
         || die 'Close Firefox before running the guest setup.'
-    if [[ " $(cat /proc/cmdline) " != *" antix_ipv6_version=1 "* ]]; then
+    if [[ " $(cat /proc/cmdline) " != *" cicada_ipv6_version=1 "* ]]; then
         die "Enable IPv6 for this VM on Fedora, then shut down and start it before guest setup."
     fi
     sudo -v
@@ -120,7 +120,7 @@ hosts = Path("/etc/hosts")
 lines = hosts.read_text().splitlines()
 lines = [line for line in lines if not re.match(r"^\s*127\.0\.1\.1\s", line)]
 hosts.write_text("\n".join(lines) + f"\n127.0.1.1\t{name}\n")
-vm_uuid = args.get("antix_vm_uuid")
+vm_uuid = args.get("cicada_vm_uuid")
 identity = {
     "name": name,
     "timezone": zone,
@@ -130,20 +130,20 @@ identity = {
         else "not explicitly assigned (older host setup)"
     ),
 }
-Path("/etc/antix-vm-identity.json").write_text(
+Path("/etc/cicada-identity.json").write_text(
     json.dumps(identity, indent=2) + "\n"
 )
 PY
     sudo hostname "$(cat /etc/hostname)"
 
     sudo install -d -m 0755 /usr/local/sbin /usr/local/bin
-    sudo tee /usr/local/sbin/antix-vm-runtime >/dev/null <<'RUNTIME'
+    sudo tee /usr/local/sbin/cicada-runtime >/dev/null <<'RUNTIME'
 #!/bin/sh
 set -eu
-exec 9>/run/antix-vm-runtime.lock
+exec 9>/run/cicada-runtime.lock
 flock -x 9
-if [ -f /usr/local/libexec/antix-vm-network.py ]; then
-    /usr/bin/python3 /usr/local/libexec/antix-vm-network.py guest
+if [ -f /usr/local/libexec/cicada-network.py ]; then
+    /usr/bin/python3 /usr/local/libexec/cicada-network.py guest
 fi
 
 if ! swapon --show=NAME --noheadings | grep -q '/dev/zram'; then
@@ -168,7 +168,7 @@ if ! mountpoint -q /mnt/downloads; then
     mkdir -p /mnt/downloads
     chown root:root /mnt/downloads
     chmod 000 /mnt/downloads
-    if grep -qw 'antix_downloads_version=1' /proc/cmdline; then
+    if grep -qw 'cicada_downloads_version=1' /proc/cmdline; then
         mount -t virtiofs -o nosuid,nodev,noexec downloads /mnt/downloads
     elif ! mount -t virtiofs -o nosuid,nodev,noexec downloads /mnt/downloads; then
         rmdir /mnt/downloads
@@ -185,33 +185,33 @@ if [ -x /etc/init.d/spice-vdagent ]; then
 fi
 
 RUNTIME
-    sudo chmod 0755 /usr/local/sbin/antix-vm-runtime
+    sudo chmod 0755 /usr/local/sbin/cicada-runtime
 
-    sudo /usr/local/sbin/antix-vm-runtime
+    sudo /usr/local/sbin/cicada-runtime
     [[ -w /mnt/downloads ]] || die 'The selected host download folder is not writable.'
 
-    local antix_sources_path="/etc/apt/sources.list.d/antix.list"
-    local antix_repository_url
-    local antix_repository_urls=(
+    local sources_path="/etc/apt/sources.list.d/antix.list"
+    local repository_url
+    local repository_urls=(
         "https://ftp.fau.de/mxlinux-packages/antix/trixie/"
         "https://fosszone.csd.auth.gr/mxlinux-archive/antix/trixie/"
     )
-    local antix_repository_refresh_succeeded="no"
+    local repository_refresh_succeeded="no"
     local spice_vdagent_version=""
 
-    for antix_repository_url in "${antix_repository_urls[@]}"; do
-        printf "deb %s trixie main nosystemd nonfree\n" "$antix_repository_url" |
-            sudo tee "$antix_sources_path" >/dev/null
+    for repository_url in "${repository_urls[@]}"; do
+        printf "deb %s trixie main nosystemd nonfree\n" "$repository_url" |
+            sudo tee "$sources_path" >/dev/null
 
         if ! sudo apt-get update \
             -o "Acquire::ForceIPv4=true" \
             -o "APT::Update::Error-Mode=any" \
-            -o "Dir::Etc::sourcelist=$antix_sources_path" \
+            -o "Dir::Etc::sourcelist=$sources_path" \
             -o "Dir::Etc::sourceparts=-" \
             -o "APT::Get::List-Cleanup=0"; then
             continue
         fi
-        antix_repository_refresh_succeeded="yes"
+        repository_refresh_succeeded="yes"
 
         spice_vdagent_version=$(
             apt-cache madison spice-vdagent |
@@ -221,7 +221,7 @@ RUNTIME
     done
 
     if [[ -z "$spice_vdagent_version" ]]; then
-        if [[ "$antix_repository_refresh_succeeded" == "no" ]]; then
+        if [[ "$repository_refresh_succeeded" == "no" ]]; then
             die "Unable to refresh either antiX repository; package availability was not checked."
         fi
 
@@ -241,23 +241,23 @@ RUNTIME
         nftables
     sudo apt-get clean
 
-    printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/antix-vm-runtime\n' "$(id -un)" |
-        sudo tee /etc/sudoers.d/antix-vm-runtime >/dev/null
-    sudo chmod 0440 /etc/sudoers.d/antix-vm-runtime
-    sudo visudo -cf /etc/sudoers.d/antix-vm-runtime
+    printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/cicada-runtime\n' "$(id -un)" |
+        sudo tee /etc/sudoers.d/cicada-runtime >/dev/null
+    sudo chmod 0440 /etc/sudoers.d/cicada-runtime
+    sudo visudo -cf /etc/sudoers.d/cicada-runtime
 
     sudo modprobe uinput
     sudo /etc/init.d/spice-vdagent restart
 
-    sudo tee /usr/local/bin/antix-vm-session >/dev/null <<'SESSION'
+    sudo tee /usr/local/bin/cicada-session >/dev/null <<'SESSION'
 #!/bin/sh
 set -eu
-sudo -n /usr/local/sbin/antix-vm-runtime
+sudo -n /usr/local/sbin/cicada-runtime
 if ! pgrep -u "$(id -u)" -x spice-vdagent >/dev/null; then
     spice-vdagent
 fi
 SESSION
-    sudo chmod 0755 /usr/local/bin/antix-vm-session
+    sudo chmod 0755 /usr/local/bin/cicada-session
 
     mkdir -p "$HOME/.desktop-session" "$HOME/.config/autostart"
     local conf="$HOME/.desktop-session/desktop-session.conf"
@@ -270,11 +270,11 @@ SESSION
     fi
     sed -i '/^[[:space:]]*LOAD_XDG_AUTOSTART=/d' "$conf"
     printf '\nLOAD_XDG_AUTOSTART="true"\n' >> "$conf"
-    cat > "$HOME/.config/autostart/antix-vm-session.desktop" <<'DESKTOP'
+    cat > "$HOME/.config/autostart/cicada-session.desktop" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=VM clipboard, downloads and compressed swap
-Exec=/usr/local/bin/antix-vm-session
+Exec=/usr/local/bin/cicada-session
 Terminal=false
 DESKTOP
 
@@ -293,7 +293,7 @@ data = json.loads(p.read_text()) if p.exists() else {}
 pol = data.setdefault('policies', {})
 pol.update({
     'DownloadDirectory': '/mnt/downloads',
-    'PromptForDownloadLocation': False,
+    'PromptForDownloadLocation': True,
     'StartDownloadsInTempDirectory': False,
     'HardwareAcceleration': False,
     'OverrideFirstRunPage': 'about:blank',
@@ -387,7 +387,7 @@ test "$(id -u)" -eq 1000 || {
     echo "Run browser as the normal demo user." >&2
     exit 1
 }
-/usr/local/bin/antix-vm-session
+/usr/local/bin/cicada-session
 test -w /mnt/downloads || {
     echo 'Host download folder unavailable; Firefox was not started.' >&2
     exit 1
@@ -414,7 +414,7 @@ DESKTOP
     sudo tee /usr/local/bin/vm-info >/dev/null <<'INFO'
 #!/bin/sh
 set -eu
-cat /etc/antix-vm-identity.json
+cat /etc/cicada-identity.json
 printf '\nCurrent local time: '
 date '+%Y-%m-%d %H:%M:%S %Z %z'
 printf '\nGuest interfaces (MAC addresses stay on the local network):\n'
@@ -427,7 +427,7 @@ swapon --show
 INFO
     sudo chmod 0755 /usr/local/bin/vm-info
     sudo install -d -m 0755 /usr/local/share
-    sudo tee /usr/local/share/antix-vm-info.html >/dev/null <<'HTML'
+    sudo tee /usr/local/share/cicada-info.html >/dev/null <<'HTML'
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>VM browser details</title>
@@ -463,7 +463,7 @@ show(); addEventListener('resize', show);
 </script></html>
 HTML
     guest_ipv6_setup
-    antix-vm-session
+    cicada-session
     touch /mnt/shared/VM-share-test.txt
     sync
     printf '\nGuest setup complete. Check these results:\n'
@@ -475,15 +475,15 @@ HTML
     printf '\nLog out once: desktop-session-exit --logout\n'
     printf 'After logging back in, run: browser\n'
     printf 'Wait for uBlock to install; check about:policies and about:addons.\n'
-    printf 'Compare browsers: browser file:///usr/local/share/antix-vm-info.html\n'
+    printf 'Compare browsers: browser file:///usr/local/share/cicada-info.html\n'
     printf 'Do NOT launch the antiX installer.\n'
 }
 
 cleanup_host_setup() {
 
-    local work="${ANTIX_SETUP_WORK:-}"
+    local work="${CICADA_SETUP_WORK:-}"
 
-    if [[ -z "$work" || "$work" != /var/tmp/antix-vm-setup.* || ! -d "$work" ]]; then
+    if [[ -z "$work" || "$work" != /var/tmp/cicada-setup.* || ! -d "$work" ]]; then
         return
     fi
 
@@ -507,27 +507,45 @@ host_setup() {
     [[ "$host_home" == /home/* && -d "$host_home" ]] || die 'Expected the normal Fedora /home/... directory.'
     [[ "$owner_uid" =~ ^[0-9]+$ && "$owner_gid" =~ ^[0-9]+$ ]] || die 'Invalid host account.'
     [[ "$replace" == yes || "$replace" == no ]] || die 'Invalid replacement option.'
-    [[ "$download" == "$host_home/"* ]] || die 'VM_DOWNLOAD must resolve inside the normal user home directory.'
+    [[ "$download" == /?* && "$download" == "$(realpath -m -- "$download")" ]] ||
+        die 'VM_DOWNLOAD must be a canonical absolute path.'
     [[ ! -L "$download" ]] || die 'VM_DOWNLOAD must not be a symbolic link.'
+    local protected
+    for protected in /boot /dev /etc /proc /run /sys /tmp /usr /var; do
+        [[ "$download" != "$protected" && "$download" != "$protected/"* ]] ||
+            die "VM_DOWNLOAD must not be inside $protected."
+    done
+    local download_owner="$download"
+    while [[ ! -e "$download_owner" ]]; do
+        download_owner=$(dirname "$download_owner")
+    done
+    [[ -d "$download_owner" && ! -L "$download_owner" &&
+       $(stat -c %u "$download_owner") == "$owner_uid" ]] ||
+        die 'VM_DOWNLOAD, or the existing folder it will be created in, must be a directory you own.'
+    local mount_target
+    while IFS= read -r mount_target; do
+        [[ "$mount_target" != "$download/"* ]] ||
+            die "VM_DOWNLOAD contains the mount point $mount_target; choose a folder without one."
+    done < <(findmnt -rno TARGET)
     if [[ -e /usr/local/sbin/antix-vm-ipv6 ||
           -e /etc/systemd/system/antix-vm-ipv6.service ||
           -e /etc/NetworkManager/dispatcher.d/90-antix-vm-ipv6 ]]; then
-        die "Remove the installed IPv6 patch first; see the network cleanup section in ANTIX-VM-GUIDE.md."
+        die "Remove the installed IPv6 patch first; see the network cleanup section in GUIDE.md."
     fi
     export LC_ALL=C LIBVIRT_DEFAULT_URI=qemu:///system
 
-    exec 8>/run/lock/antix-vm-setup.lock
+    exec 8>/run/lock/cicada-setup.lock
     flock -x 8
 
-    local iso=/var/lib/libvirt/images/antiX-26_x64-full.iso
-    local base=/var/lib/libvirt/images/antix-26-shared-boot
+    local iso=/var/lib/libvirt/images/cicada.iso
+    local base=/var/lib/libvirt/images/cicada-shared-boot
     local disk="/var/lib/libvirt/images/$vm-persistence.raw"
     local legacy="/var/lib/libvirt/images/$vm.qcow2"
     local share="$host_home/Documents/Shared"
     local self
     self=$(readlink -f "${BASH_SOURCE[0]}")
-    local network_helper="$(dirname "$self")/antix-vm-network.py"
-    [[ -f "$network_helper" ]] || die "The companion antix-vm-network.py file is missing."
+    local network_helper="$(dirname "$self")/cicada-network.py"
+    [[ -f "$network_helper" ]] || die "The companion cicada-network.py file is missing."
 
     local required_commands=(
         virsh
@@ -551,9 +569,9 @@ host_setup() {
     virsh list --all >/dev/null
     python3 "$network_helper" preflight
     if [[ ! -f "$iso" ]]; then
-        [[ -f "$host_home/Downloads/antiX-26_x64-full.iso" ]] \
-            || die 'The antiX-26_x64-full.iso file is missing from both expected locations.'
-        install -m 0644 "$host_home/Downloads/antiX-26_x64-full.iso" "$iso"
+        [[ -f "$host_home/Downloads/cicada.iso" ]] \
+            || die 'Rename the antiX Full x64 ISO to ~/Downloads/cicada.iso, then rerun.'
+        install -m 0644 "$host_home/Downloads/cicada.iso" "$iso"
     fi
     if ! virsh net-info default >/dev/null 2>&1; then
         [[ -f /usr/share/libvirt/networks/default.xml ]] \
@@ -676,8 +694,8 @@ PY
     printf "NIC MAC: %s\n" "$vm_mac"
 
     local work
-    work=$(mktemp -d /var/tmp/antix-vm-setup.XXXXXX)
-    export ANTIX_SETUP_WORK="$work"
+    work=$(mktemp -d /var/tmp/cicada-setup.XXXXXX)
+    export CICADA_SETUP_WORK="$work"
     trap cleanup_host_setup EXIT
     mkdir "$work/iso" "$work/disk"
 
@@ -741,12 +759,14 @@ PY
     setfacl -m "u:1000:rwx,d:u:1000:rwx,u:$owner_uid:rwx,d:u:$owner_uid:rwx,u:qemu:--x" "$download"
     setfacl -m u:qemu:--x "$host_home" "$host_home/Documents"
     local download_parent="$download"
-    while [[ "$download_parent" != "$host_home" ]]; do
+    while [[ "$download_parent" != / ]]; do
         download_parent=$(dirname "$download_parent")
-        [[ "$download_parent" == "$host_home" || "$download_parent" == "$host_home/"* ]] ||
-            die 'VM_DOWNLOAD escaped the normal user home directory.'
-        setfacl -m u:qemu:--x "$download_parent"
+        if [[ "$download_parent" != / && $(stat -c %u "$download_parent") == "$owner_uid" ]]; then
+            setfacl -m u:qemu:--x "$download_parent"
+        fi
     done
+    runuser -u qemu -- test -x "$download" ||
+        die 'QEMU cannot reach VM_DOWNLOAD; a parent folder you do not own blocks access.'
     semanage fcontext -m -t svirt_image_t "$share(/.*)?" 2>/dev/null \
         || semanage fcontext -a -t svirt_image_t "$share(/.*)?"
     local download_context
@@ -754,12 +774,12 @@ PY
     semanage fcontext -m -t svirt_image_t "$download_context" 2>/dev/null \
         || semanage fcontext -a -t svirt_image_t "$download_context"
     local setup_copy network_copy
-    setup_copy=$(mktemp "$share/.antix-vm-setup.XXXXXX")
+    setup_copy=$(mktemp "$share/.cicada-setup.XXXXXX")
     install -m 0755 -o "$owner_uid" -g "$owner_gid" "$self" "$setup_copy"
-    mv -fT "$setup_copy" "$share/antix-vm-setup.sh"
-    network_copy=$(mktemp "$share/.antix-vm-network.XXXXXX")
+    mv -fT "$setup_copy" "$share/cicada-setup.sh"
+    network_copy=$(mktemp "$share/.cicada-network.XXXXXX")
     install -m 0644 -o "$owner_uid" -g "$owner_gid" "$network_helper" "$network_copy"
-    mv -fT "$network_copy" "$share/antix-vm-network.py"
+    mv -fT "$network_copy" "$share/cicada-network.py"
     rm -f -- "$share/antix-setup.sh"
     restorecon -R "$share"
     restorecon -R "$download"
@@ -783,8 +803,8 @@ PY
         "p_static_root"
         "tz=$selected_tz"
         "hostname=$vm"
-        "antix_vm_uuid=$vm_uuid"
-        "antix_downloads_version=1"
+        "cicada_vm_uuid=$vm_uuid"
+        "cicada_downloads_version=1"
     )
     local kernel_argument_text="${kernel_arguments[*]}"
 
@@ -821,26 +841,26 @@ PY
     printf '\nInside the guest (not the installer), type:\n'
     printf 'sudo mkdir -p /mnt/shared\n'
     printf 'mountpoint -q /mnt/shared || sudo mount -t virtiofs shared /mnt/shared\n'
-    printf 'bash /mnt/shared/antix-vm-setup.sh --guest\n'
+    printf 'bash /mnt/shared/cicada-setup.sh --guest\n'
 }
 
 case "${1:-}" in
     --enable-ipv6)
-        [[ $# -eq 2 ]] || die "Usage: bash antix-vm-setup.sh --enable-ipv6 VM_NAME"
+        [[ $# -eq 2 ]] || die "Usage: bash cicada-setup.sh --enable-ipv6 VM_NAME"
         valid_name "$2" || die "Use a valid VM name."
         host_ipv6_command enable "$2"
-        printf "\nAfter starting the VM: bash /mnt/shared/antix-vm-setup.sh --guest\n"
+        printf "\nAfter starting the VM: bash /mnt/shared/cicada-setup.sh --guest\n"
         ;;
     --ipv6-status)
-        [[ $# -eq 1 ]] || die "Usage: bash antix-vm-setup.sh --ipv6-status"
+        [[ $# -eq 1 ]] || die "Usage: bash cicada-setup.sh --ipv6-status"
         host_ipv6_command status
         ;;
     --guest-ipv6)
-        [[ $# -eq 1 ]] || die "Usage: bash antix-setup.sh --guest-ipv6"
+        [[ $# -eq 1 ]] || die "Usage: bash cicada-setup.sh --guest-ipv6"
         guest_ipv6_setup
         ;;
     --guest)
-        [[ $# -eq 1 ]] || die 'Usage: bash antix-setup.sh --guest'
+        [[ $# -eq 1 ]] || die 'Usage: bash cicada-setup.sh --guest'
         guest_setup
         ;;
     --host)
@@ -848,24 +868,23 @@ case "${1:-}" in
         host_setup "$@"
         ;;
     -h|--help|'')
-        printf 'Usage: bash antix-vm-setup.sh VM_NAME VM_DOWNLOAD [--replace]\n'
-        printf 'Example: VM_NAME="antix-vm1"\n'
+        printf 'Usage: bash cicada-setup.sh VM_NAME VM_DOWNLOAD [--replace]\n'
+        printf 'Example: VM_NAME="cicada-vm1"\n'
         printf '         VM_DOWNLOAD="$HOME/Videos/Captures"\n'
-        printf '         bash ~/Documents/Shared/antix-vm-setup.sh "$VM_NAME" "$VM_DOWNLOAD"\n'
+        printf '         bash ~/Documents/Shared/cicada-setup.sh "$VM_NAME" "$VM_DOWNLOAD"\n'
         printf 'Run as your normal Fedora user. --replace purges the selected VM/private disk.\n'
         printf "Network: dedicated public IPv6 per VM; desktop Internet traffic cannot fall back to IPv4.\n"
         printf "Root/APT and local DNS retain IPv4. IPv4-only sites will not load in browser.\n"
-        printf "Existing VM upgrade: bash antix-vm-setup.sh --enable-ipv6 VM_NAME\n"
-        printf "Address report: bash antix-vm-setup.sh --ipv6-status\n"
-        printf 'Guest bootstrap: bash /mnt/shared/antix-vm-setup.sh --guest\n'
+        printf "Existing VM upgrade: bash cicada-setup.sh --enable-ipv6 VM_NAME\n"
+        printf "Address report: bash cicada-setup.sh --ipv6-status\n"
+        printf 'Guest bootstrap: bash /mnt/shared/cicada-setup.sh --guest\n'
         ;;
     *)
         [[ $(id -u) -ne 0 ]] || die 'Run from your normal Fedora account; the script invokes sudo.'
-        [[ $# -ge 2 && $# -le 3 ]] || die 'Usage: bash antix-vm-setup.sh VM_NAME VM_DOWNLOAD [--replace]'
+        [[ $# -ge 2 && $# -le 3 ]] || die 'Usage: bash cicada-setup.sh VM_NAME VM_DOWNLOAD [--replace]'
         valid_name "$1" || die 'Use 1-63 lowercase letters/digits/hyphens, beginning and ending with a letter/digit.'
-        [[ "$2" == /* ]] || die 'VM_DOWNLOAD must be an absolute path; use "$HOME/...".'
+        [[ "$2" == /* ]] || die 'VM_DOWNLOAD must be an absolute path, such as "$HOME/...".'
         download=$(realpath -m -- "$2")
-        [[ "$download" == "$HOME/"* ]] || die 'VM_DOWNLOAD must resolve inside your home directory.'
         [[ ! -L "$download" ]] || die 'VM_DOWNLOAD must not be a symbolic link.'
         replace=no
         if [[ $# -eq 3 ]]; then

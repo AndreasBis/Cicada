@@ -31,16 +31,16 @@ ARGUMENT_DEFINITIONS = {
     },
     "vm_name": {"nargs": "?"},
 }
-STATE_DIRECTORY = Path("/var/lib/antix-vm-network")
+STATE_DIRECTORY = Path("/var/lib/cicada-network")
 STATE_PATH = STATE_DIRECTORY / "state.json"
-HELPER_PATH = Path("/usr/local/libexec/antix-vm-network.py")
-LOCK_PATH = Path("/run/lock/antix-vm-network.lock")
-NETWORK_NAME = "antix-vm-ipv6"
-BRIDGE_NAME = "virbr-antix6"
+HELPER_PATH = Path("/usr/local/libexec/cicada-network.py")
+LOCK_PATH = Path("/run/lock/cicada-network.lock")
+NETWORK_NAME = "cicada-ipv6"
+BRIDGE_NAME = "virbr-cicada6"
 PRIVATE_PREFIX = ipaddress.IPv6Network("fd71:6e9f:db42:1::/64")
 GATEWAY_ADDRESS = str(PRIVATE_PREFIX.network_address + 1)
-HOST_TABLE = "antix_vm_ipv6"
-GUEST_TABLE = "antix_vm_browser"
+HOST_TABLE = "cicada_ipv6"
+GUEST_TABLE = "cicada_browser"
 BROWSER_UID = 1000
 ROUTE_PROBE = "2606:4700:4700::1111"
 LEGACY_PATHS = (
@@ -617,7 +617,7 @@ def refresh_network(state: NetworkState) -> None:
     state.aliases = sorted(reserved_aliases, key=lambda alias: (alias.interface, alias.address))
     save_state(state)
 
-    sysctl_path = Path("/etc/sysctl.d/90-antix-vm-network.conf")
+    sysctl_path = Path("/etc/sysctl.d/90-cicada-network.conf")
     atomic_write(
         sysctl_path,
         f"net.ipv6.conf.{interface}.accept_ra=2\n"
@@ -699,9 +699,9 @@ def validate_domain(domain: element_tree.Element, vm_name: str) -> Path:
         raise ValueError("The selected domain name does not match.")
     vm_uuid = str(uuid.UUID(domain.findtext("uuid", "")))
     arguments = shlex.split(domain.findtext("./os/cmdline", ""))
-    if f"antix_vm_uuid={vm_uuid}" not in arguments:
-        raise RuntimeError("This is not a VM created by the maintained antiX setup.")
-    if domain.findtext("./os/kernel") != "/var/lib/libvirt/images/antix-26-shared-boot/vmlinuz":
+    if f"cicada_vm_uuid={vm_uuid}" not in arguments:
+        raise RuntimeError("This is not a VM created by the maintained Cicada setup.")
+    if domain.findtext("./os/kernel") != "/var/lib/libvirt/images/cicada-shared-boot/vmlinuz":
         raise RuntimeError("The selected VM has an unexpected kernel.")
     interfaces = domain.findall("./devices/interface")
     if not interfaces or any(
@@ -800,17 +800,17 @@ def update_domain(
         for argument in shlex.split(cmdline.text or "")
         if not argument.startswith((
             "ipv6.disable=",
-            "antix_private_ipv6=",
-            "antix_ipv6_",
-            "antix_ipv4_dns=",
+            "cicada_private_ipv6=",
+            "cicada_ipv6_",
+            "cicada_ipv4_dns=",
         ))
     ]
     arguments.extend([
-        "antix_ipv6_version=1",
-        f"antix_private_ipv6={identity.private_ipv6}",
-        f"antix_ipv6_mac={identity.mac}",
-        f"antix_ipv6_gateway={GATEWAY_ADDRESS}",
-        f"antix_ipv4_dns={dns_address}",
+        "cicada_ipv6_version=1",
+        f"cicada_private_ipv6={identity.private_ipv6}",
+        f"cicada_ipv6_mac={identity.mac}",
+        f"cicada_ipv6_gateway={GATEWAY_ADDRESS}",
+        f"cicada_ipv4_dns={dns_address}",
     ])
     cmdline.text = shlex.join(arguments)
     return element_tree.tostring(domain, encoding="unicode")
@@ -820,9 +820,9 @@ def install_host_service() -> None:
 
     atomic_write(HELPER_PATH, Path(__file__).read_text(), 0o644)
     atomic_write(
-        Path("/etc/systemd/system/antix-vm-network.service"),
+        Path("/etc/systemd/system/cicada-network.service"),
         "[Unit]\n"
-        "Description=Dedicated antiX VM IPv6 addresses and source guards\n"
+        "Description=Dedicated Cicada VM IPv6 addresses and source guards\n"
         "After=network-online.target virtnetworkd.socket firewalld.service\n"
         "Wants=network-online.target\n\n"
         "[Service]\n"
@@ -832,13 +832,13 @@ def install_host_service() -> None:
         0o644,
     )
     atomic_write(
-        Path("/etc/systemd/system/antix-vm-network.timer"),
+        Path("/etc/systemd/system/cicada-network.timer"),
         "[Unit]\n"
-        "Description=Refresh antiX VM addresses after uplink changes\n\n"
+        "Description=Refresh Cicada VM addresses after uplink changes\n\n"
         "[Timer]\n"
         "OnBootSec=15s\n"
         "OnUnitInactiveSec=30s\n"
-        "Unit=antix-vm-network.service\n\n"
+        "Unit=cicada-network.service\n\n"
         "[Install]\n"
         "WantedBy=timers.target\n",
         0o644,
@@ -848,7 +848,7 @@ def install_host_service() -> None:
         "systemctl",
         "enable",
         "--now",
-        "antix-vm-network.timer",
+        "cicada-network.timer",
     )
 
 
@@ -890,7 +890,7 @@ def enable_vm(vm_name: str, state: NetworkState) -> None:
     original_xml = virsh("dumpxml", vm_name, "--inactive")
     domain = element_tree.fromstring(original_xml)
     share = validate_domain(domain, vm_name)
-    setup_path = Path(__file__).with_name("antix-vm-setup.sh")
+    setup_path = Path(__file__).with_name("cicada-setup.sh")
     if not setup_path.is_file():
         raise RuntimeError(
             "Run --enable-ipv6 from the maintained setup script and its companion helper."
@@ -929,12 +929,12 @@ def enable_vm(vm_name: str, state: NetworkState) -> None:
     definition_path = STATE_DIRECTORY / "domain.xml"
     atomic_write(definition_path, updated_xml)
     virsh("define", str(definition_path))
-    atomic_write(share / "antix-vm-setup.sh", setup_source, 0o755)
-    atomic_write(share / "antix-vm-network.py", Path(__file__).read_text(), 0o644)
+    atomic_write(share / "cicada-setup.sh", setup_source, 0o755)
+    atomic_write(share / "cicada-network.py", Path(__file__).read_text(), 0o644)
     (share / "antix-setup.sh").unlink(missing_ok=True)
     install_host_service()
     print(f"IPv6 configured for {vm_name}; its disk and profile were preserved.")
-    print("Start the VM and complete the guest step in ANTIX-VM-GUIDE.md.")
+    print("Start the VM and complete the guest step in GUIDE.md.")
     print_status(state)
 
 
@@ -945,9 +945,9 @@ def guest_configuration() -> dict[str, str]:
         for argument in shlex.split(Path("/proc/cmdline").read_text())
         if "=" in argument
     )
-    if arguments.get("antix_ipv6_version") != "1" or arguments.get("ipv6.disable") == "1":
+    if arguments.get("cicada_ipv6_version") != "1" or arguments.get("ipv6.disable") == "1":
         raise RuntimeError("Enable IPv6 on the host for this VM, then shut down and start the VM.")
-    private_address = arguments.get("antix_private_ipv6", "")
+    private_address = arguments.get("cicada_private_ipv6", "")
     parsed_address = ipaddress.IPv6Address(private_address)
     if (
         parsed_address not in PRIVATE_PREFIX
@@ -955,10 +955,10 @@ def guest_configuration() -> dict[str, str]:
         or str(parsed_address) != private_address
     ):
         raise ValueError("The guest private IPv6 address is invalid.")
-    if arguments.get("antix_ipv6_gateway") != GATEWAY_ADDRESS:
+    if arguments.get("cicada_ipv6_gateway") != GATEWAY_ADDRESS:
         raise ValueError("The guest IPv6 gateway is invalid.")
-    ipaddress.IPv4Address(arguments.get("antix_ipv4_dns", ""))
-    if not re.fullmatch(r"52:54:00(?::[0-9a-f]{2}){3}", arguments.get("antix_ipv6_mac", "")):
+    ipaddress.IPv4Address(arguments.get("cicada_ipv4_dns", ""))
+    if not re.fullmatch(r"52:54:00(?::[0-9a-f]{2}){3}", arguments.get("cicada_ipv6_mac", "")):
         raise ValueError("The guest dedicated MAC is invalid.")
     return arguments
 
@@ -968,11 +968,11 @@ def guest_ipv4_interfaces(
     interfaces: list[dict[str, Any]],
 ) -> tuple[str, str, str]:
 
-    gateway = ipaddress.IPv4Address(configuration["antix_ipv4_dns"])
+    gateway = ipaddress.IPv4Address(configuration["cicada_ipv4_dns"])
     dedicated_interfaces = [
         interface["ifname"]
         for interface in interfaces
-        if interface.get("address", "").lower() == configuration["antix_ipv6_mac"]
+        if interface.get("address", "").lower() == configuration["cicada_ipv6_mac"]
     ]
     if len(dedicated_interfaces) != 1:
         raise RuntimeError("The dedicated IPv6 adapter is missing or ambiguous.")
@@ -1013,7 +1013,7 @@ def preserve_guest_configuration(path: Path, content: str) -> bool:
     if previous_content == content:
         return False
     if path.exists():
-        backup_path = path.with_name(f"{path.name}.antix-vm-backup")
+        backup_path = path.with_name(f"{path.name}.cicada-backup")
         if not backup_path.exists():
             atomic_write(backup_path, previous_content, 0o600)
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
@@ -1050,9 +1050,9 @@ def prevent_dedicated_ipv4(interface: str, mac: str) -> None:
 
     connman_directory = Path("/var/lib/connman")
     if connman_directory.is_dir() or shutil.which("connmanctl") is not None:
-        policy_path = connman_directory / "antix-vm-ipv6.config"
+        policy_path = connman_directory / "cicada-ipv6.config"
         policy = (
-            "[service_antix_ipv6]\n"
+            "[service_cicada_ipv6]\n"
             "Type=ethernet\n"
             f"MAC={mac}\n"
             "IPv4=off\n"
@@ -1153,17 +1153,17 @@ def configure_guest_ipv4() -> None:
     )
     prevent_dedicated_ipv4(
         dedicated_interface,
-        configuration["antix_ipv6_mac"],
+        configuration["cicada_ipv6_mac"],
     )
     restore_guest_ipv4_route(
         dedicated_interface,
         ipv4_interface,
         source_address,
-        configuration["antix_ipv4_dns"],
+        configuration["cicada_ipv4_dns"],
     )
     print(
         f"IPv4 maintenance route: {source_address} on {ipv4_interface} "
-        f"via {configuration["antix_ipv4_dns"]}; "
+        f"via {configuration["cicada_ipv4_dns"]}; "
         f"{dedicated_interface} is reserved for IPv6."
     )
 
@@ -1176,7 +1176,7 @@ def configure_guest() -> None:
     apply_rules(
         "inet",
         GUEST_TABLE,
-        build_guest_rules(configuration["antix_ipv4_dns"]),
+        build_guest_rules(configuration["cicada_ipv4_dns"]),
     )
     configure_guest_ipv4()
     interfaces = run_json(
@@ -1188,7 +1188,7 @@ def configure_guest() -> None:
     dedicated_interfaces = [
         interface["ifname"]
         for interface in interfaces
-        if interface.get("address", "").lower() == configuration["antix_ipv6_mac"]
+        if interface.get("address", "").lower() == configuration["cicada_ipv6_mac"]
     ]
     if len(dedicated_interfaces) != 1:
         raise RuntimeError("The dedicated IPv6 adapter is missing or ambiguous.")
@@ -1216,7 +1216,7 @@ def configure_guest() -> None:
         dedicated_interface,
         "up",
     )
-    private_address = configuration["antix_private_ipv6"]
+    private_address = configuration["cicada_private_ipv6"]
     existing_addresses = run_json(
         "ip",
         "-j",
@@ -1286,9 +1286,9 @@ def configure_guest() -> None:
 def install_guest() -> None:
 
     guest_configuration()
-    runtime_path = Path("/usr/local/sbin/antix-vm-runtime")
+    runtime_path = Path("/usr/local/sbin/cicada-runtime")
     runtime_text = runtime_path.read_text()
-    if "antix-vm-runtime.lock" not in runtime_text:
+    if "cicada-runtime.lock" not in runtime_text:
         raise RuntimeError("Complete the normal guest setup before installing the IPv6 upgrade.")
     invocation = f"/usr/bin/python3 {HELPER_PATH} guest"
     bootstrap_invocation = (
